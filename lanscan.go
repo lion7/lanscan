@@ -32,15 +32,15 @@ import (
 const maxAddressesPerSubnet = 1000
 
 // ScanLinkLocal scans all link local networks on all interfaces found on the current computer for hosts
-// responding on the given port. It will use the given amout of threads and will return after the given timeout
+// responding on the given port. It will use the given amount of threads and will return after the given timeout
 // or after finishing the scan.
 func ScanLinkLocal(network string, port int, threads int, timeout time.Duration) ([]string, error) {
 	// Validate parameters
 	if !validateNetwork(network) {
-		return []string{}, fmt.Errorf("Invalid network %s (Valid options: %v)", network, validNetworks)
+		return []string{}, fmt.Errorf("invalid network %s (valid options: %v)", network, validNetworks)
 	}
 	if port < 0 || port > 65535 {
-		return []string{}, fmt.Errorf("Invalid port %d (Valid options: 0 - 65535)", port)
+		return []string{}, fmt.Errorf("invalid port %d (valid options: 0 - 65535)", port)
 	}
 
 	hosts := make(chan string, 100)
@@ -67,7 +67,56 @@ func ScanLinkLocal(network string, port int, threads int, timeout time.Duration)
 	close(hosts)
 
 	// collect responses
-	var responses = []string{}
+	var responses []string
+	for {
+		select {
+		case found := <-results:
+			responses = append(responses, found)
+		case <-done:
+			threads--
+			if threads == 0 {
+				return responses, nil
+			}
+		case <-time.After(timeout):
+			return responses, nil
+		}
+	}
+}
+
+// ScanCIDR scans all IPs in the given CIDR for hosts responding on the given port.
+// It will use the given amount of threads and will return after the given timeout or after finishing the scan.
+func ScanCIDR(network string, cidr string, port int, threads int, timeout time.Duration) ([]string, error) {
+	// Validate parameters
+	if !validateNetwork(network) {
+		return []string{}, fmt.Errorf("invalid network %s (valid options: %v)", network, validNetworks)
+	}
+	if port < 0 || port > 65535 {
+		return []string{}, fmt.Errorf("invalid port %d (valid options: 0 - 65535)", port)
+	}
+
+	hosts := make(chan string, 100)
+	results := make(chan string, 10)
+	done := make(chan bool, threads)
+
+	// Start workers
+	for worker := 0; worker < threads; worker++ {
+		go ProbeHosts(hosts, port, network, results, done)
+	}
+
+	// Generate host list to check
+	allIPs := CalculateSubnetIPs(cidr, maxAddressesPerSubnet)
+
+	startIndex := findIndex(cidr, allIPs)
+	for i := startIndex + 1; i < len(allIPs); i++ {
+		hosts <- allIPs[i] // add all following hosts to channel
+		if (startIndex - i) >= 0 {
+			hosts <- allIPs[startIndex-i] // add all previous hosts to channel
+		}
+	}
+	close(hosts)
+
+	// collect responses
+	var responses []string
 	for {
 		select {
 		case found := <-results:
@@ -84,8 +133,8 @@ func ScanLinkLocal(network string, port int, threads int, timeout time.Duration)
 }
 
 func validateNetwork(network string) bool {
-	for _, net := range validNetworks {
-		if network == net {
+	for _, n := range validNetworks {
+		if network == n {
 			return true
 		}
 	}

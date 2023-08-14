@@ -54,7 +54,7 @@ func IsLinkLocalAddress(ip net.IP) bool {
 
 // LinkLocalAddresses returns all link local IP addresses for the given network.
 func LinkLocalAddresses(network string) []string {
-	var addrs = []string{}
+	var addrs []string
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return addrs
@@ -89,7 +89,7 @@ func LinkLocalAddresses(network string) []string {
 
 // CalculateSubnetIPs will calculate a given maximum of addresses in the given cidr address space.
 func CalculateSubnetIPs(cidr string, maxAddresses int) []string {
-	var ips = []string{}
+	var ips []string
 
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {

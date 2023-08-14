@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/stefanwichmann/lanscan"
+	"github.com/lion7/lanscan"
 	"log"
 	"time"
 )
